@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Easyvite Demo</title>
+  <title>Easyvite Demo (Firebase)</title>
   <meta name="description" content="Easyvite demo — create an event, share a link, collect availability, lock a time, add to calendar."/>
   <style>
     :root{
@@ -35,6 +35,7 @@
     .nav a{ padding:8px 10px; border-radius:12px; border:1px solid transparent; }
     .nav a:hover{ border-color:var(--line); color:var(--text); }
     h1{ margin:12px 0 6px; font-size:40px; letter-spacing:-.9px; }
+    h2{ margin:18px 0 6px; font-size:22px; letter-spacing:-.3px; }
     .sub{ margin:0 0 16px; color:var(--muted); line-height:1.6; max-width:70ch; }
     .grid{ display:grid; grid-template-columns: 1fr; gap:14px; }
     @media(min-width: 920px){ .grid{ grid-template-columns: 1.1fr .9fr; align-items:start; } }
@@ -47,7 +48,7 @@
     .card.white{ background:#fff; border:1px solid rgba(0,0,0,.06); box-shadow: var(--shadow); }
     .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
     label{ font-weight:900; font-size:13px; display:block; margin:10px 0 6px; }
-    input, select, textarea{
+    input, textarea{
       width:100%;
       padding:12px 12px;
       border-radius:14px;
@@ -74,7 +75,7 @@
     .btn:hover{ transform: translateY(-1px); box-shadow:0 6px 18px rgba(0,0,0,.06); }
     .btn:active{ transform: translateY(0px); box-shadow: 0 1px 0 rgba(0,0,0,.03); }
     .btn.full{ width:100%; }
-    .btn.good{ border-color:#1f2937; }
+    .btn.good{ border-color:#111; }
     .btn.ghost{ background:transparent; }
     .small{ font-size:13px; color:var(--muted); font-weight:800; }
     .pill{
@@ -101,9 +102,6 @@
     .votes{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
     .vote{ padding:10px 12px; border-radius:14px; border:1.5px solid #cfd3d8; background:#fff; font-weight:900; cursor:pointer; }
     .vote.sel{ border-color:#111; }
-    .vote.yes{ }
-    .vote.maybe{ }
-    .vote.no{ }
     .tally{ margin-top:8px; font-size:13px; color:var(--muted); font-weight:850; }
     .callout{
       background:#fff;
@@ -113,7 +111,6 @@
     }
     .copyrow{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
     .copyrow input{ flex: 1 1 360px; }
-    .toast{ font-weight:900; color:#111; }
     .danger{ color:#b91c1c; font-weight:900; }
     .ok{ color:#065f46; font-weight:900; }
     .footer{
@@ -141,49 +138,52 @@
     <div id="app"></div>
 
     <div class="footer">
-      <div>Easyvite Demo — no server. Data is stored locally in your browser.</div>
-      <div class="muted2">Tip: For real use, host on GitHub Pages and text the invite link.</div>
+      <div>Easyvite Demo — Firebase enabled (cross-device invites).</div>
+      <div class="muted2">If you haven't added your Firebase config yet, scroll up — it will show setup steps.</div>
     </div>
   </div>
 
-<script>
-(function(){
-  const qs = new URLSearchParams(location.search);
-  const eventId = qs.get("e");
-  const role = qs.get("role"); // "host" optional
-  const KEY = "easyvite_demo_events_v1";
+<!-- Firebase + app logic -->
+<script type="module">
+  // Firebase modular SDK via Google's CDN (official docs)
+  // You can pin/upgrade versions here if desired.
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
+  import {
+    getFirestore, doc, setDoc, updateDoc, getDoc,
+    collection, onSnapshot, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
+
+  // 1) Paste your Firebase web app config here (Firebase Console -> Project settings -> Your apps -> Web app -> Config)
+  // NOTE: This must be real values, not placeholders.
+  const firebaseConfig = {
+    apiKey: "AIzaSyCqfyW5y76AUCgdvuQp7UbxaC_c2Xn2hNI",
+    authDomain: "easyvite-6b47f.firebaseapp.com",
+    projectId: "easyvite-6b47f",
+    storageBucket: "easyvite-6b47f.firebasestorage.app",
+    messagingSenderId: "1060233633876",
+    appId: "1:1060233633876:web:14f0120a7e9f2548174dc1",
+    measurementId: "G-XRWTV0HGB5"
+  };
 
   const $ = (sel) => document.querySelector(sel);
 
-  function nowISO(){
-    return new Date().toISOString();
+  function isConfigReady(cfg){
+    return cfg && Object.values(cfg).every(v => typeof v === "string" && v && v !== "PASTE_ME");
+  }
+
+  function escapeHtml(s){
+    return String(s||"").replace(/[&<>"']/g, (m)=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
   }
 
   function uid(){
-    // short, URL-safe id
     return Math.random().toString(36).slice(2, 8) + "-" + Math.random().toString(36).slice(2, 8);
   }
 
-  function loadAll(){
-    try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch(e){ return {}; }
-  }
-  function saveAll(all){
-    localStorage.setItem(KEY, JSON.stringify(all));
-  }
-  function getEvent(id){
-    const all = loadAll();
-    return all[id] || null;
-  }
-  function upsertEvent(ev){
-    const all = loadAll();
-    all[ev.id] = ev;
-    saveAll(all);
-  }
-
-  function fmtLocal(dtISO){
-    const d = new Date(dtISO);
-    const opt = { weekday:"short", month:"short", day:"numeric", hour:"numeric", minute:"2-digit" };
-    return d.toLocaleString(undefined, opt);
+  function toLocalInputFromISO(iso){
+    const d = new Date(iso);
+    const pad = (n)=>String(n).padStart(2,"0");
+    const local = new Date(d.getTime() - d.getTimezoneOffset()*60000);
+    return `${local.getFullYear()}-${pad(local.getMonth()+1)}-${pad(local.getDate())}T${pad(local.getHours())}:${pad(local.getMinutes())}`;
   }
 
   function fmtRange(startISO, endISO){
@@ -195,11 +195,10 @@
     const day = s.toLocaleDateString(undefined, dayOpt);
     const st = s.toLocaleTimeString(undefined, timeOpt);
     const et = e.toLocaleTimeString(undefined, timeOpt);
-    return sameDay ? `${day} · ${st}–${et}` : `${fmtLocal(startISO)} → ${fmtLocal(endISO)}`;
+    return sameDay ? `${day} · ${st}–${et}` : `${s.toLocaleString()} → ${e.toLocaleString()}`;
   }
 
   function toICSDateLocal(date){
-    // floating local time: YYYYMMDDTHHMMSS
     const pad = (n) => String(n).padStart(2,"0");
     return date.getFullYear()
       + pad(date.getMonth()+1)
@@ -211,7 +210,7 @@
   }
 
   function downloadICS(ev){
-    const slot = ev.slots.find(s => s.id === ev.lockedSlotId);
+    const slot = ev.slots?.find(s => s.id === ev.lockedSlotId);
     if(!slot) return;
 
     const dtstamp = toICSDateLocal(new Date());
@@ -250,28 +249,107 @@ END:VCALENDAR`;
   }
 
   function proposeSlotsFromBase(baseStartLocal, durationMin){
-    // baseStartLocal = "YYYY-MM-DDTHH:MM"
     const start = new Date(baseStartLocal);
     if(isNaN(start.getTime())) return [];
     const dur = Math.max(15, Math.min(600, Number(durationMin)||60));
     const mk = (offsetMin) => {
       const s = new Date(start.getTime() + offsetMin*60*1000);
       const e = new Date(s.getTime() + dur*60*1000);
-      return {
-        id: uid(),
-        startISO: s.toISOString(),
-        endISO: e.toISOString()
-      };
+      return { id: uid(), startISO: s.toISOString(), endISO: e.toISOString() };
     };
     return [mk(0), mk(90), mk(180)];
   }
 
+  async function copyText(t){
+    try{ await navigator.clipboard.writeText(t); }
+    catch{
+      const ta = document.createElement("textarea");
+      ta.value = t;
+      document.body.appendChild(ta);
+      ta.select(); document.execCommand("copy");
+      ta.remove();
+    }
+  }
+
+  // --------- Firebase wiring ----------
+  let db = null;
+  let app = null;
+
+  function renderSetup(){
+    $("#modePill").textContent = "SETUP";
+    $("#app").innerHTML = `
+      <h1>Connect Firebase</h1>
+      <p class="sub">To make invite links work across devices, this demo uses Firebase Firestore.</p>
+
+      <div class="grid">
+        <div class="card white">
+          <h2 style="margin-top:0">Do this in Firebase Console</h2>
+          <div class="muted" style="line-height:1.7">
+            <ol>
+              <li>Create a Firebase project</li>
+              <li>Build → <strong>Firestore Database</strong> → Create database (Start in <strong>test mode</strong> for now)</li>
+              <li>Project Settings → Your apps → <strong>Web app</strong> → copy the config object</li>
+              <li>Paste your config into <code>demo.html</code> where it says <code>PASTE_ME</code></li>
+              <li>Commit + push to GitHub Pages, then reload this page</li>
+            </ol>
+            <div class="small muted2">Official CDN/module setup docs: Firebase “Alternative ways to add Firebase” (CDN modules).<\/div>
+          </div>
+          <div class="divider"></div>
+          <div class="callout">
+            <div style="font-weight:900; margin-bottom:6px">Firestore rules (recommended for demo)</div>
+            <div class="muted" style="line-height:1.6">
+              In Firestore → Rules, paste the rules shown in the README/message and publish.<br/>
+              (Keeps it open enough for demo, but narrows paths to <code>events</code> + <code>responses</code>.)
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="callout">
+            <div style="font-weight:900; margin-bottom:6px">Why we’re doing this next</div>
+            <div class="muted" style="line-height:1.6">
+              Your landing page is live. Your demo works. <strong>Firebase is the bridge</strong> that makes texting an invite link actually usable on another phone.
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function initFirebase(){
+    if(!isConfigReady(firebaseConfig)){
+      renderSetup();
+      return false;
+    }
+    app = initializeApp(firebaseConfig);
+    db = getFirestore(app);
+    return true;
+  }
+
+  // --------- Firestore data model ----------
+  // events/{eventId}
+  // events/{eventId}/responses/{responderId}
+  //
+  // event doc:
+  // { id, title, notes, hostName, durationMin, slots:[{id,startISO,endISO}], lockedSlotId, createdAt }
+  //
+  // response doc:
+  // { name, votes: { [slotId]: "yes"|"maybe"|"no" }, updatedAt }
+
+  function responderIdFromName(name){
+    // stable doc id, safe chars
+    return name.trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,40) || uid();
+  }
+
+  const nameKey = "easyvite_demo_name_v1";
+
+  // --------- UI: Create ----------
   function renderCreate(){
     $("#modePill").textContent = "CREATE";
     const root = $("#app");
     root.innerHTML = `
       <h1>Create an event</h1>
-      <p class="sub">This demo makes a shareable link, collects availability, then creates an “Add to Calendar” (.ics) file when you lock a time.</p>
+      <p class="sub">Create an event, share the invite link, collect votes, lock a time, then generate an Add-to-Calendar (.ics) file.</p>
 
       <div class="grid">
         <div class="card white">
@@ -290,7 +368,7 @@ END:VCALENDAR`;
             <div>
               <label>First proposed start time</label>
               <input id="baseStart" type="datetime-local"/>
-              <div class="small" style="margin-top:6px">We’ll auto-create 3 options (now + 90m + 180m). You can edit them after.</div>
+              <div class="small" style="margin-top:6px">We’ll auto-create 3 options (now + 90m + 180m). You can edit later.</div>
             </div>
             <div>
               <label>Duration (minutes)</label>
@@ -303,30 +381,26 @@ END:VCALENDAR`;
 
           <div class="row" style="margin-top:12px">
             <button class="btn good" id="createBtn">Create event</button>
-            <span class="small muted">No server — stored in your browser.</span>
+            <span class="small muted">Saved to Firestore.</span>
           </div>
           <div id="createMsg" class="small" style="margin-top:10px"></div>
         </div>
 
         <div class="card">
           <div class="callout">
-            <div style="font-weight:900; margin-bottom:6px">What makes it feel “live” (even without linking calendars)</div>
+            <div style="font-weight:900; margin-bottom:6px">How to test with your girlfriend/friends</div>
             <div class="muted" style="line-height:1.6">
-              1) Share invite link<br/>
-              2) Friends vote (✅/⚠️/❌)<br/>
-              3) Lock a time<br/>
-              4) Everyone taps <strong>Add to Calendar</strong> (.ics)
+              1) Create event on your laptop<br/>
+              2) Copy invite link<br/>
+              3) Text it to her / your group<br/>
+              4) Watch votes update live
             </div>
-          </div>
-          <div class="divider"></div>
-          <div class="muted small">
-            Next step after this demo: mobile app (Expo) + Apple Calendar write access + Google OAuth.
           </div>
         </div>
       </div>
     `;
 
-    // set default baseStart to today 18:00 local
+    // default baseStart to today 6:00pm local
     const base = $("#baseStart");
     const d = new Date();
     d.setHours(18,0,0,0);
@@ -334,7 +408,7 @@ END:VCALENDAR`;
     const localVal = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     base.value = localVal;
 
-    $("#createBtn").addEventListener("click", () => {
+    $("#createBtn").addEventListener("click", async () => {
       const title = ($("#title").value || "").trim() || "Easyvite Plan";
       const hostName = ($("#hostName").value || "").trim();
       const notes = ($("#notes").value || "").trim();
@@ -353,45 +427,83 @@ END:VCALENDAR`;
         title,
         notes,
         hostName,
-        createdAtISO: nowISO(),
         durationMin: duration,
         slots,
-        responses: {}, // name -> {slotId: "yes|maybe|no"}
         lockedSlotId: null,
-        lockedAtISO: null
+        createdAt: serverTimestamp(),
       };
-      upsertEvent(ev);
 
-      // go to host view
-      location.href = `demo.html?e=${encodeURIComponent(id)}&role=host`;
+      try{
+        await setDoc(doc(db, "events", id), ev);
+        location.href = `demo.html?e=${encodeURIComponent(id)}&role=host`;
+      }catch(err){
+        $("#createMsg").innerHTML = `<span class="danger">Create failed: ${escapeHtml(err?.message || String(err))}</span>`;
+      }
     });
   }
 
-  function renderEvent(ev, isHost){
+  // --------- UI: Event ----------
+  let unsubEvent = null;
+  let unsubResponses = null;
+
+  function cleanupSubs(){
+    try{ unsubEvent && unsubEvent(); }catch{}
+    try{ unsubResponses && unsubResponses(); }catch{}
+    unsubEvent = null;
+    unsubResponses = null;
+  }
+
+  function tallyForSlot(responsesMap, slotId){
+    let yes=0, maybe=0, no=0;
+    for(const rid in responsesMap){
+      const v = responsesMap[rid]?.votes?.[slotId];
+      if(v==="yes") yes++;
+      else if(v==="maybe") maybe++;
+      else if(v==="no") no++;
+    }
+    return {yes, maybe, no};
+  }
+
+  function computeBestSlot(ev, responsesMap){
+    let best = null;
+    for(const s of (ev.slots||[])){
+      const t = tallyForSlot(responsesMap, s.id);
+      const score = t.yes*2 + t.maybe*1;
+      if(!best || score > best.score){
+        best = {slotId: s.id, score, tally:t};
+      }
+    }
+    return best;
+  }
+
+  function renderEvent(ev, responsesMap, isHost){
     $("#modePill").textContent = isHost ? "HOST" : "INVITE";
     const root = $("#app");
 
     const inviteUrl = `${location.origin}${location.pathname.replace(/\/[^\/]*$/,'/') || ''}demo.html?e=${encodeURIComponent(ev.id)}`;
     const hostUrl = `${location.origin}${location.pathname.replace(/\/[^\/]*$/,'/') || ''}demo.html?e=${encodeURIComponent(ev.id)}&role=host`;
 
-    const lockedSlot = ev.lockedSlotId ? ev.slots.find(s => s.id === ev.lockedSlotId) : null;
+    const lockedSlot = ev.lockedSlotId ? (ev.slots||[]).find(s => s.id === ev.lockedSlotId) : null;
+    const best = (!ev.lockedSlotId) ? computeBestSlot(ev, responsesMap) : null;
+
+    const savedName = localStorage.getItem(nameKey) || "";
 
     root.innerHTML = `
       <h1>${escapeHtml(ev.title)}</h1>
       <p class="sub">
         ${ev.hostName ? `<strong>${escapeHtml(ev.hostName)}</strong> is organizing. ` : ``}
-        Vote on the best time (✅/⚠️/❌). When a time is locked, you can add it to your calendar.
+        Vote on the best time (✅/⚠️/❌). When it’s locked, tap “Add to Calendar”.
       </p>
 
       <div class="grid">
         <div class="card white">
           <div class="row">
             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-              <span class="pill">${ev.slots.length} options</span>
+              <span class="pill">${(ev.slots||[]).length} options</span>
               ${lockedSlot ? `<span class="pill">LOCKED</span>` : `<span class="pill">OPEN</span>`}
             </div>
             <div style="display:flex; gap:10px; flex-wrap:wrap;">
-              ${isHost ? `<button class="btn" id="editBtn">Edit options</button>` : ``}
+              ${isHost && !ev.lockedSlotId ? `<button class="btn" id="editBtn">Edit options</button>` : ``}
               <button class="btn" id="addCalTopBtn" ${lockedSlot ? "" : "disabled"} style="${lockedSlot ? "" : "opacity:.5; cursor:not-allowed;"}">Add to Calendar</button>
             </div>
           </div>
@@ -405,7 +517,7 @@ END:VCALENDAR`;
           ` : `
             <div class="callout" style="margin-top:12px">
               <div style="font-weight:900; margin-bottom:4px">Not locked yet</div>
-              <div class="muted">Vote below. The organizer can lock any option at any time.</div>
+              <div class="muted">${best && best.score>0 ? `Best option is currently Option ${((ev.slots||[]).findIndex(s=>s.id===best.slotId))+1}.` : `Vote below. The organizer can lock any option.`}</div>
             </div>
           `}
 
@@ -413,7 +525,7 @@ END:VCALENDAR`;
 
           <label>Your name</label>
           <div class="row" style="align-items:stretch">
-            <input id="yourName" placeholder="Trevor" maxlength="30" style="flex:1 1 260px"/>
+            <input id="yourName" placeholder="Your name" maxlength="30" value="${escapeHtml(savedName)}" style="flex:1 1 260px"/>
             <button class="btn" id="saveNameBtn">Save</button>
           </div>
           <div id="nameMsg" class="small" style="margin-top:8px"></div>
@@ -427,9 +539,9 @@ END:VCALENDAR`;
             <div class="row">
               <div>
                 <div style="font-weight:900">Host tools</div>
-                <div class="small muted">Lock a time when you’re ready. This generates the calendar event (.ics).</div>
+                <div class="small muted">Lock a time when you’re ready.</div>
               </div>
-              <button class="btn good" id="autoPickBtn">Auto-pick best</button>
+              <button class="btn good" id="autoPickBtn" ${ev.lockedSlotId ? "disabled" : ""} style="${ev.lockedSlotId ? "opacity:.5; cursor:not-allowed;" : ""}">Auto-pick best</button>
             </div>
           ` : ``}
 
@@ -442,7 +554,7 @@ END:VCALENDAR`;
               <input id="inviteLink" value="${inviteUrl}" readonly/>
               <button class="btn" id="copyInviteBtn">Copy</button>
             </div>
-            <div class="small muted2" style="margin-top:8px">Text this link to your friends. (In this demo, tallies work best when everyone uses the same browser/device.)</div>
+            <div class="small muted2" style="margin-top:8px">Text this link to your friends. Votes update live.</div>
           </div>
 
           ${isHost ? `
@@ -453,33 +565,26 @@ END:VCALENDAR`;
                 <input id="hostLink" value="${hostUrl}" readonly/>
                 <button class="btn" id="copyHostBtn">Copy</button>
               </div>
-              <div class="small muted2" style="margin-top:8px">Use this link to see host controls on another device/browser.</div>
             </div>
           ` : ``}
 
           <div class="divider"></div>
           <div class="callout">
-            <div style="font-weight:900; margin-bottom:6px">What’s “real” vs demo?</div>
+            <div style="font-weight:900; margin-bottom:6px">Cross-device is live now ✅</div>
             <div class="muted" style="line-height:1.6">
-              <strong>Real today:</strong> invite links + voting + add-to-calendar (.ics).<br/>
-              <strong>Next:</strong> Expo app + Apple Calendar write + Google Calendar OAuth + cross-device storage.
+              This version stores events and votes in Firestore, so your girlfriend can vote from her phone while you watch on your laptop.
             </div>
           </div>
         </div>
       </div>
 
       <section id="how" style="margin-top:22px">
-        <h2 style="margin:0 0 6px; font-size:22px; letter-spacing:-.3px">How it works</h2>
+        <h2>How it works</h2>
         <p class="sub" style="margin-bottom:0">
-          1) Create an event → 2) Share invite link → 3) Everyone votes → 4) Lock a time → 5) Add to Calendar.
+          1) Create → 2) Share invite link → 3) Everyone votes → 4) Lock a time → 5) Add to Calendar.
         </p>
       </section>
     `;
-
-    // name persistence
-    const nameKey = "easyvite_demo_name_v1";
-    const savedName = localStorage.getItem(nameKey) || "";
-    $("#yourName").value = savedName;
 
     $("#saveNameBtn").addEventListener("click", () => {
       const n = ($("#yourName").value || "").trim();
@@ -489,7 +594,8 @@ END:VCALENDAR`;
       }
       localStorage.setItem(nameKey, n);
       $("#nameMsg").innerHTML = `<span class="ok">Saved.</span>`;
-      renderSlots(ev, isHost);
+      // re-render slots for selection state
+      renderSlots(ev, responsesMap, isHost);
     });
 
     $("#copyInviteBtn").addEventListener("click", async () => {
@@ -499,74 +605,41 @@ END:VCALENDAR`;
     });
 
     if(isHost){
-      $("#copyHostBtn").addEventListener("click", async () => {
+      $("#copyHostBtn")?.addEventListener("click", async () => {
         await copyText($("#hostLink").value);
         $("#copyHostBtn").textContent = "Copied";
         setTimeout(()=>$("#copyHostBtn").textContent="Copy", 900);
       });
 
-      $("#autoPickBtn").addEventListener("click", () => {
-        const best = computeBestSlot(ev);
-        if(!best){
+      $("#autoPickBtn")?.addEventListener("click", async () => {
+        const b = computeBestSlot(ev, responsesMap);
+        if(!b || b.score <= 0){
           alert("No votes yet. Ask people to respond first.");
           return;
         }
-        lockSlot(ev, best.slotId);
+        await lockSlot(ev.id, b.slotId);
       });
 
-      $("#editBtn").addEventListener("click", () => {
-        renderEdit(ev);
+      $("#editBtn")?.addEventListener("click", () => {
+        renderEdit(ev, responsesMap);
       });
     }
 
     $("#addCalTopBtn").addEventListener("click", () => downloadICS(ev));
 
-    renderSlots(ev, isHost);
+    renderSlots(ev, responsesMap, isHost);
   }
 
-  function escapeHtml(s){
-    return String(s||"").replace(/[&<>"']/g, (m)=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
-  }
-
-  async function copyText(t){
-    try{
-      await navigator.clipboard.writeText(t);
-    }catch(e){
-      const ta = document.createElement("textarea");
-      ta.value = t;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
-    }
-  }
-
-  function ensureResponder(name){
-    if(!name) return null;
-    if(!evCache.responses[name]) evCache.responses[name] = {};
-    return evCache.responses[name];
-  }
-
-  function getResponderName(){
-    const nameKey = "easyvite_demo_name_v1";
-    return (localStorage.getItem(nameKey) || "").trim();
-  }
-
-  function voteLabel(v){
-    if(v==="yes") return "✅ Yes";
-    if(v==="maybe") return "⚠️ Maybe";
-    if(v==="no") return "❌ No";
-    return "";
-  }
-
-  function renderSlots(ev, isHost){
+  function renderSlots(ev, responsesMap, isHost){
     const slotsEl = $("#slots");
-    const myName = getResponderName();
-    const myVotes = myName ? (ev.responses[myName] || {}) : {};
-    const best = computeBestSlot(ev);
+    const myName = (localStorage.getItem(nameKey) || "").trim();
+    const myRid = myName ? responderIdFromName(myName) : null;
+    const myVotes = myRid ? (responsesMap[myRid]?.votes || {}) : {};
 
-    slotsEl.innerHTML = ev.slots.map((s, idx) => {
-      const tall = tallyForSlot(ev, s.id);
+    const best = (!ev.lockedSlotId) ? computeBestSlot(ev, responsesMap) : null;
+
+    slotsEl.innerHTML = (ev.slots||[]).map((s, idx) => {
+      const tall = tallyForSlot(responsesMap, s.id);
       const isLocked = ev.lockedSlotId === s.id;
       const bestTag = (!ev.lockedSlotId && best && best.slotId === s.id && best.score > 0) ? `<span class="pill">BEST</span>` : "";
       const lockedTag = isLocked ? `<span class="pill">LOCKED</span>` : "";
@@ -579,9 +652,7 @@ END:VCALENDAR`;
               <p class="meta">${fmtRange(s.startISO, s.endISO)}</p>
             </div>
             ${isHost ? `
-              <button class="btn good" data-lock="${s.id}" ${ev.lockedSlotId ? "disabled" : ""} style="${ev.lockedSlotId ? "opacity:.5; cursor:not-allowed;" : ""}">
-                Lock
-              </button>
+              <button class="btn good" data-lock="${s.id}" ${ev.lockedSlotId ? "disabled" : ""} style="${ev.lockedSlotId ? "opacity:.5; cursor:not-allowed;" : ""}">Lock</button>
             ` : ``}
           </div>
 
@@ -601,8 +672,8 @@ END:VCALENDAR`;
 
     // vote handlers
     slotsEl.querySelectorAll("[data-vote]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const name = getResponderName();
+      btn.addEventListener("click", async () => {
+        const name = (localStorage.getItem(nameKey) || "").trim();
         if(!name){
           alert("Enter your name first (and tap Save).");
           return;
@@ -611,79 +682,61 @@ END:VCALENDAR`;
 
         const slotId = btn.getAttribute("data-slot");
         const vote = btn.getAttribute("data-vote");
-        if(!ev.responses[name]) ev.responses[name] = {};
-        ev.responses[name][slotId] = vote;
-        upsertEvent(ev);
-        evCache = ev;
-        renderSlots(evCache, isHost);
+        const rid = responderIdFromName(name);
+
+        const rref = doc(db, "events", ev.id, "responses", rid);
+        try{
+          await setDoc(rref, {
+            name,
+            votes: { [slotId]: vote },
+            updatedAt: serverTimestamp(),
+          }, { merge: true });
+        }catch(err){
+          alert("Vote failed: " + (err?.message || err));
+        }
       });
     });
 
     // lock handlers
     if(isHost){
       slotsEl.querySelectorAll("[data-lock]").forEach(btn => {
-        btn.addEventListener("click", () => {
+        btn.addEventListener("click", async () => {
           const slotId = btn.getAttribute("data-lock");
-          lockSlot(ev, slotId);
+          await lockSlot(ev.id, slotId);
         });
       });
     }
   }
 
-  function tallyForSlot(ev, slotId){
-    let yes=0, maybe=0, no=0;
-    for(const name in (ev.responses||{})){
-      const v = (ev.responses[name]||{})[slotId];
-      if(v==="yes") yes++;
-      else if(v==="maybe") maybe++;
-      else if(v==="no") no++;
+  async function lockSlot(eventId, slotId){
+    try{
+      await updateDoc(doc(db, "events", eventId), {
+        lockedSlotId: slotId,
+        lockedAt: serverTimestamp(),
+      });
+      setTimeout(() => {
+        const ok = confirm("Locked! Download the calendar invite (.ics) now?");
+        if(ok){
+          // We'll fetch latest event doc before generating ICS
+          // (so it has the lockedSlotId)
+          // This is quick and keeps it simple.
+          getDoc(doc(db,"events",eventId)).then(snap=>{
+            if(snap.exists()) downloadICS(snap.data());
+          });
+        }
+      }, 250);
+    }catch(err){
+      alert("Lock failed: " + (err?.message || err));
     }
-    return {yes, maybe, no};
   }
 
-  function computeBestSlot(ev){
-    // score: yes=2, maybe=1, no=0
-    let best = null;
-    for(const s of ev.slots){
-      const t = tallyForSlot(ev, s.id);
-      const score = t.yes*2 + t.maybe*1;
-      if(!best || score > best.score){
-        best = {slotId: s.id, score, tally:t};
-      }
-    }
-    return best;
-  }
-
-  function lockSlot(ev, slotId){
-    if(ev.lockedSlotId) return;
-    ev.lockedSlotId = slotId;
-    ev.lockedAtISO = nowISO();
-    upsertEvent(ev);
-    evCache = ev;
-    // re-render
-    renderEvent(evCache, true);
-    // prompt download
-    setTimeout(() => {
-      const ok = confirm("Locked! Do you want to download the calendar invite (.ics) now?");
-      if(ok) downloadICS(evCache);
-    }, 250);
-  }
-
-  function renderEdit(ev){
+  function renderEdit(ev, responsesMap){
     $("#modePill").textContent = "EDIT";
     const root = $("#app");
 
-    const toLocalInput = (iso) => {
-      const d = new Date(iso);
-      const pad = (n)=>String(n).padStart(2,"0");
-      // local "datetime-local" needs local time; we reconstruct by offsetting
-      const local = new Date(d.getTime() - d.getTimezoneOffset()*60000);
-      return `${local.getFullYear()}-${pad(local.getMonth()+1)}-${pad(local.getDate())}T${pad(local.getHours())}:${pad(local.getMinutes())}`;
-    };
-
     root.innerHTML = `
       <h1>Edit options</h1>
-      <p class="sub">Change the 3 proposed times. Votes remain attached to option IDs in this demo, so if you change times a lot, just create a new event.</p>
+      <p class="sub">Change the 3 proposed times. (Votes will still refer to option IDs — for major changes, create a new event.)</p>
 
       <div class="grid">
         <div class="card white">
@@ -698,9 +751,9 @@ END:VCALENDAR`;
             </div>
           </div>
 
-          ${ev.slots.map((s, i)=>`
+          ${(ev.slots||[]).map((s, i)=>`
             <label>Option ${i+1} start</label>
-            <input class="optStart" data-i="${i}" type="datetime-local" value="${toLocalInput(s.startISO)}"/>
+            <input class="optStart" data-i="${i}" type="datetime-local" value="${toLocalInputFromISO(s.startISO)}"/>
           `).join("")}
 
           <label>Notes</label>
@@ -710,16 +763,13 @@ END:VCALENDAR`;
             <button class="btn good" id="saveEditBtn">Save</button>
             <button class="btn ghost" id="cancelEditBtn">Cancel</button>
           </div>
-          <div class="small muted2" style="margin-top:10px">Tip: If you want votes to map cleanly, create a new event for major changes.</div>
         </div>
 
         <div class="card">
           <div class="callout">
-            <div style="font-weight:900; margin-bottom:6px">Next integration steps</div>
+            <div style="font-weight:900; margin-bottom:6px">Tip</div>
             <div class="muted" style="line-height:1.6">
-              <strong>Apple Calendar (mobile):</strong> write directly with device permissions.<br/>
-              <strong>Google Calendar:</strong> OAuth + free/busy + create event.<br/>
-              <strong>Cross-device:</strong> Firebase/Firestore so invites work for everyone.
+              If you want the cleanest data for a real beta, create a new event whenever you change options materially.
             </div>
           </div>
         </div>
@@ -727,10 +777,10 @@ END:VCALENDAR`;
     `;
 
     $("#cancelEditBtn").addEventListener("click", ()=> {
-      renderEvent(ev, true);
+      renderEvent(ev, responsesMap, true);
     });
 
-    $("#saveEditBtn").addEventListener("click", ()=> {
+    $("#saveEditBtn").addEventListener("click", async ()=> {
       if(ev.lockedSlotId){
         alert("This event is locked. Create a new event to change times.");
         return;
@@ -740,62 +790,94 @@ END:VCALENDAR`;
       const dur = Math.max(15, Math.min(600, Number($("#edur").value)||90));
       const notes = ($("#enotes").value || "").trim();
 
-      // rebuild times but keep slot IDs to preserve votes (demo constraint)
       const starts = Array.from(document.querySelectorAll(".optStart")).map(inp => inp.value);
-      for(let i=0;i<ev.slots.length;i++){
+      const slots = (ev.slots||[]).map((slot, i) => {
         const s = new Date(starts[i]);
-        if(isNaN(s.getTime())) continue;
-        const end = new Date(s.getTime() + dur*60*1000);
-        ev.slots[i].startISO = s.toISOString();
-        ev.slots[i].endISO = end.toISOString();
+        if(isNaN(s.getTime())) return slot;
+        const e = new Date(s.getTime() + dur*60*1000);
+        return { ...slot, startISO: s.toISOString(), endISO: e.toISOString() };
+      });
+
+      try{
+        await updateDoc(doc(db, "events", ev.id), {
+          title,
+          durationMin: dur,
+          notes,
+          slots,
+          updatedAt: serverTimestamp(),
+        });
+      }catch(err){
+        alert("Save failed: " + (err?.message || err));
       }
-      ev.title = title;
-      ev.durationMin = dur;
-      ev.notes = notes;
-      upsertEvent(ev);
-      evCache = ev;
-      renderEvent(evCache, true);
     });
   }
 
-  // global cache
-  let evCache = null;
+  async function route(){
+    if(!initFirebase()) return;
 
-  // New event link
-  $("#newEventLink").addEventListener("click", (e) => {
-    e.preventDefault();
-    location.href = "demo.html";
-  });
+    const qs = new URLSearchParams(location.search);
+    const eventId = qs.get("e");
+    const role = qs.get("role");
+    const isHost = (role === "host");
 
-  // Route
-  if(!eventId){
-    renderCreate();
-    return;
-  }
+    // New event link
+    $("#newEventLink").addEventListener("click", (e) => {
+      e.preventDefault();
+      cleanupSubs();
+      history.pushState({}, "", "demo.html");
+      route();
+    });
 
-  const ev = getEvent(eventId);
-  if(!ev){
-    $("#modePill").textContent = "ERROR";
-    $("#app").innerHTML = `
-      <h1>Event not found</h1>
-      <p class="sub">This demo stores data in the creator’s browser. If you opened this link on a different device/browser, it won’t have the event record.</p>
-      <div class="card white">
-        <div class="muted" style="line-height:1.6">
-          To make invites work across devices, the next step is adding a real backend (Firebase/Firestore).
-          For now, try creating the event again on this device:
+    if(!eventId){
+      cleanupSubs();
+      renderCreate();
+      return;
+    }
+
+    // event not found?
+    const evSnap = await getDoc(doc(db, "events", eventId));
+    if(!evSnap.exists()){
+      $("#modePill").textContent = "ERROR";
+      $("#app").innerHTML = `
+        <h1>Event not found</h1>
+        <p class="sub">Double-check the link. If this keeps happening, your Firestore rules may be blocking reads.</p>
+        <div class="card white">
+          <div class="row">
+            <a class="btn" href="demo.html">Create a new event</a>
+            <a class="btn ghost" href="index.html">Back to landing</a>
+          </div>
         </div>
-        <div style="margin-top:12px"><a class="btn" href="demo.html">Create a new event</a></div>
-      </div>
-    `;
-    return;
+      `;
+      return;
+    }
+
+    // Live subscriptions
+    const responsesMap = {}; // responderId -> {name, votes}
+    let currentEvent = evSnap.data();
+
+    function paint(){
+      renderEvent(currentEvent, responsesMap, isHost);
+    }
+
+    cleanupSubs();
+
+    unsubEvent = onSnapshot(doc(db, "events", eventId), (snap) => {
+      if(!snap.exists()) return;
+      currentEvent = snap.data();
+      paint();
+    });
+
+    unsubResponses = onSnapshot(collection(db, "events", eventId, "responses"), (snap) => {
+      // reset map
+      for(const k of Object.keys(responsesMap)) delete responsesMap[k];
+      snap.forEach(docSnap => { responsesMap[docSnap.id] = docSnap.data(); });
+      paint();
+    });
+
+    paint();
   }
 
-  evCache = ev;
-
-  const isHost = (role === "host");
-  renderEvent(evCache, isHost);
-
-})();
+  route();
 </script>
 </body>
 </html>
