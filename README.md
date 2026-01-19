@@ -1,5 +1,5 @@
 # shared-calendar
-Shared Calendar with Friends and Family
+Shared Calendar with Friends and Family - https://trevpool-design.github.io/shared-calendar/week.html
 # Easyvite
 
 **Easyvite** is a lightweight scheduling assistant that helps groups of friends (or couples) quickly find a time and lock plans — without endless group texts.
