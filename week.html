@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Easyvite — Week View</title>
+  <meta name="description" content="Easyvite Week View — shared busy/free awareness for two people."/>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --text:#111111;
+      --muted:#6b7280;
+      --muted2:#9ca3af;
+      --line:#e5e7eb;
+      --card:#f5f6f7;
+      --shadow:0 12px 30px rgba(0,0,0,.08);
+      --radius:18px;
+      --font: ui-sans-serif, system-ui, -apple-system, "SF Pro Display",
+              Segoe UI, Roboto, Helvetica, Arial;
+    }
+    *{ box-sizing:border-box; }
+    body{ margin:0; font-family:var(--font); background:var(--bg); color:var(--text); }
+    a{ color:inherit; text-decoration:none; }
+    .wrap{ max-width:1200px; margin:0 auto; padding:22px 18px 50px; }
+    .top{
+      display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap;
+      padding-bottom:12px; border-bottom:1px solid var(--line); margin-bottom:16px;
+    }
+    .brand{ display:flex; gap:10px; align-items:center; font-weight:950; letter-spacing:-.2px; }
+    .mark{ width:30px; height:30px; border-radius:10px; border:1px solid var(--line);
+      background:linear-gradient(180deg,#fff,#f7f7f7); box-shadow:0 6px 18px rgba(0,0,0,.06); }
+    .nav{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; color:var(--muted); font-weight:800; font-size:14px; }
+    .nav a{ padding:8px 10px; border-radius:12px; border:1px solid transparent; }
+    .nav a:hover{ border-color:var(--line); color:var(--text); }
+    h1{ margin:10px 0 6px; font-size:38px; letter-spacing:-.8px; }
+    .sub{ margin:0 0 14px; color:var(--muted); line-height:1.6; max-width:80ch; }
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap:14px;
+    }
+    @media(min-width: 980px){
+      .grid{ grid-template-columns: 1fr 1fr; }
+    }
+
+    .card{
+      background:var(--card);
+      border-radius: var(--radius);
+      padding:14px;
+      box-shadow: 0 1px 0 rgba(0,0,0,.03);
+    }
+    .card.white{ background:#fff; border:1px solid rgba(0,0,0,.06); box-shadow: var(--shadow); }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; }
+    .pill{
+      display:inline-flex; gap:8px; align-items:center;
+      padding:8px 10px;
+      border-radius:999px;
+      border:1px solid rgba(0,0,0,.10);
+      background:#fff;
+      font-weight:900;
+      font-size:12px;
+    }
+    .small{ font-size:13px; color:var(--muted); font-weight:800; }
+    .muted2{ color:var(--muted2); }
+    .divider{ height:1px; background:var(--line); margin:12px 0; }
+    .btn{
+      display:inline-flex; align-items:center; justify-content:center;
+      padding:11px 14px;
+      border-radius:14px;
+      border:1.5px solid #cfd3d8;
+      background:#fff;
+      font-weight:900;
+      cursor:pointer;
+      user-select:none;
+      transition: transform .12s ease, box-shadow .12s ease;
+      box-shadow: 0 1px 0 rgba(0,0,0,.03);
+      white-space:nowrap;
+    }
+    .btn:hover{ transform: translateY(-1px); box-shadow:0 6px 18px rgba(0,0,0,.06); }
+    .btn.good{ border-color:#111; }
+    label{ font-weight:950; font-size:13px; display:block; margin:10px 0 6px; }
+    input, select{
+      width:100%;
+      padding:11px 12px;
+      border-radius:14px;
+      border:1.5px solid #cfd3d8;
+      background:#fff;
+      font-weight:750;
+      outline:none;
+    }
+    .two{ display:grid; grid-template-columns: 1fr; gap:12px; }
+    @media(min-width: 680px){ .two{ grid-template-columns: 1fr 1fr; } }
+
+    /* Week grid */
+    .week{
+      overflow:auto;
+      border-radius:16px;
+      border:1px solid rgba(0,0,0,.08);
+      background:#fff;
+    }
+    .weekGrid{
+      min-width: 860px;
+      display:grid;
+      grid-template-columns: 70px repeat(7, 1fr);
+    }
+    .cell{
+      border-right:1px solid rgba(0,0,0,.06);
+      border-bottom:1px solid rgba(0,0,0,.06);
+      padding:7px 8px;
+      font-size:12px;
+      font-weight:850;
+    }
+    .cell.head{
+      position:sticky; top:0;
+      background:#fff;
+      z-index:2;
+      font-size:12px;
+      letter-spacing:-.1px;
+    }
+    .cell.time{
+      position:sticky; left:0;
+      background:#fff;
+      z-index:1;
+      color:var(--muted);
+      font-weight:900;
+    }
+    .slot{
+      height:22px;
+      padding:0;
+    }
+    .slot.busy{
+      background: rgba(17,17,17,.10);
+    }
+    .slot.soft{
+      background: rgba(17,17,17,.06);
+    }
+    .slot.free{
+      background: transparent;
+    }
+    .slot:hover{
+      outline:2px solid rgba(0,0,0,.12);
+      outline-offset:-2px;
+      cursor:pointer;
+    }
+    .legend{ display:flex; gap:10px; flex-wrap:wrap; }
+    .swatch{ width:14px; height:14px; border-radius:4px; border:1px solid rgba(0,0,0,.12); }
+    .swatch.busy{ background: rgba(17,17,17,.10); }
+    .swatch.soft{ background: rgba(17,17,17,.06); }
+
+    .toast{
+      position:fixed; left:50%; bottom:18px; transform:translateX(-50%);
+      background:#111; color:#fff;
+      padding:10px 12px;
+      border-radius:999px;
+      font-weight:900;
+      font-size:13px;
+      opacity:0;
+      pointer-events:none;
+      transition: opacity .18s ease;
+      max-width: 92vw;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .toast.show{ opacity: 0.92; }
+
+    .footer{
+      margin-top:22px;
+      padding-top:14px;
+      border-top:1px solid var(--line);
+      color:var(--muted);
+      font-size:13px;
+      display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    }
+    code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand"><span class="mark" aria-hidden="true"></span> Easyvite <span class="pill" id="pairPill">WEEK VIEW</span></div>
+      <div class="nav">
+        <a href="index.html">Landing</a>
+        <a href="demo.html">Planner demo</a>
+        <a href="#" id="jumpToday">This week</a>
+      </div>
+    </div>
+
+    <h1>Shared Week</h1>
+    <p class="sub">
+      This is the “no more explaining your week” view: you and your girlfriend can see <strong>busy vs. free</strong> blocks
+      (no event titles). Tap any square to add a busy block.
+    </p>
+
+    <div class="grid">
+      <div class="card white">
+        <div class="row">
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+            <span class="pill" id="mePill">You</span>
+            <span class="pill" id="themPill">Partner</span>
+          </div>
+          <div class="legend">
+            <span class="pill"><span class="swatch busy"></span> Busy</span>
+            <span class="pill"><span class="swatch soft"></span> Soft busy</span>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="two">
+          <div>
+            <label>Pair ID</label>
+            <input id="pairId" placeholder="trevor-erin" />
+            <div class="small muted2" style="margin-top:6px">This groups two people together. Use anything memorable.</div>
+          </div>
+          <div>
+            <label>Time window (local)</label>
+            <select id="window">
+              <option value="7-22">7:00am–10:00pm</option>
+              <option value="6-23">6:00am–11:00pm</option>
+              <option value="8-21">8:00am–9:00pm</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="two">
+          <div>
+            <label>Your name (doc id)</label>
+            <input id="meName" placeholder="Trevor" maxlength="30"/>
+          </div>
+          <div>
+            <label>Partner name (doc id)</label>
+            <input id="themName" placeholder="Erin" maxlength="30"/>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:12px">
+          <button class="btn good" id="applyBtn">Apply</button>
+          <span class="small" id="status">Connecting…</span>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="row">
+          <div>
+            <div style="font-weight:950">Add a busy block</div>
+            <div class="small muted">Tap any cell in the grid to prefill day/time.</div>
+          </div>
+          <button class="btn" id="clearMineBtn">Clear my blocks (this week)</button>
+        </div>
+
+        <div class="two" style="margin-top:10px">
+          <div>
+            <label>Day</label>
+            <select id="blockDay"></select>
+          </div>
+          <div>
+            <label>Type</label>
+            <select id="blockType">
+              <option value="busy">Busy</option>
+              <option value="soft">Soft busy</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="two">
+          <div>
+            <label>Start</label>
+            <input id="blockStart" type="time" value="18:00"/>
+          </div>
+          <div>
+            <label>End</label>
+            <input id="blockEnd" type="time" value="19:30"/>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:12px">
+          <button class="btn good" id="saveBlockBtn">Save block</button>
+          <span class="small muted2">Saved to Firestore in real time.</span>
+        </div>
+
+        <div class="small muted2" style="margin-top:10px; line-height:1.5">
+          Data model: <code>pairs/{pairId}/people/{personId}</code> with <code>blocks</code> for the week.
+          No titles, no locations, just time ranges.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="callout">
+          <div style="font-weight:950; margin-bottom:6px">How to use (couple MVP)</div>
+          <div class="small muted" style="line-height:1.65">
+            1) Set Pair ID (e.g. <code>trevor-erin</code>)<br/>
+            2) Set Your Name + Partner Name<br/>
+            3) Tap Apply<br/>
+            4) Tap the grid to mark busy times<br/>
+            5) Partner opens the same link and does the same
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="callout">
+          <div style="font-weight:950; margin-bottom:6px">Next “wow” upgrade</div>
+          <div class="small muted" style="line-height:1.65">
+            Add calendar connections so blocks are created automatically from Apple/Google calendars,
+            while still storing only <strong>busy/free</strong>.
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="callout">
+          <div style="font-weight:950; margin-bottom:6px">Privacy defaults</div>
+          <div class="small muted" style="line-height:1.65">
+            This view intentionally avoids showing event titles. For couples, you usually want awareness, not surveillance.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card white" style="margin-top:14px">
+      <div class="row">
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <span class="pill" id="weekLabel">Week</span>
+          <span class="small muted2">Tap any cell to prefill the “Add a busy block” form.</span>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn" id="prevWeekBtn">← Prev</button>
+          <button class="btn" id="nextWeekBtn">Next →</button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="week" id="weekWrap">
+        <div class="weekGrid" id="weekGrid"></div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div>Easyvite Week View — passive busy/free awareness.</div>
+      <div class="muted2">Pro tip: bookmark this page on your home screen.</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
+  import {
+    getFirestore, doc, setDoc, updateDoc, getDoc, onSnapshot,
+    serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
+
+  // ✅ Firebase config (your project)
+  const firebaseConfig = {
+    apiKey: "AIzaSyCqfyW5y76AUCgdvuQp7UbxaC_c2Xn2hNI",
+    authDomain: "easyvite-6b47f.firebaseapp.com",
+    projectId: "easyvite-6b47f",
+    storageBucket: "easyvite-6b47f.firebasestorage.app",
+    messagingSenderId: "1060233633876",
+    appId: "1:1060233633876:web:14f0120a7e9f2548174dc1",
+    measurementId: "G-XRWTV0HGB5"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  const $ = (s) => document.querySelector(s);
+  const toastEl = $("#toast");
+
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    setTimeout(()=>toastEl.classList.remove("show"), 1400);
+  }
+
+  function slug(name){
+    return (name||"").trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,40);
+  }
+
+  function startOfWeek(d){
+    const x = new Date(d);
+    x.setHours(0,0,0,0);
+    const day = x.getDay(); // 0 Sun
+    const diff = (day + 6) % 7; // Monday start
+    x.setDate(x.getDate() - diff);
+    return x;
+  }
+
+  function addDays(d, n){
+    const x = new Date(d);
+    x.setDate(x.getDate()+n);
+    return x;
+  }
+
+  function fmtDay(d){
+    return d.toLocaleDateString(undefined, { weekday:"short", month:"short", day:"numeric" });
+  }
+
+  function minutesToTime(m){
+    const h = Math.floor(m/60);
+    const mm = m % 60;
+    const pad = (x)=>String(x).padStart(2,"0");
+    return `${pad(h)}:${pad(mm)}`;
+  }
+
+  function timeToMinutes(t){
+    const [h,m] = (t||"00:00").split(":").map(Number);
+    return h*60 + (m||0);
+  }
+
+  function weekKey(weekStart){
+    // YYYY-MM-DD
+    const pad = (n)=>String(n).padStart(2,"0");
+    return `${weekStart.getFullYear()}-${pad(weekStart.getMonth()+1)}-${pad(weekStart.getDate())}`;
+  }
+
+  // Data model:
+  // pairs/{pairId}/people/{personId}
+  // { personId, displayName, blocksByWeek: { [weekKey]: [ {startMin,endMin,type,createdAt} ] }, updatedAt }
+  function personRef(pairId, personId){
+    return doc(db, "pairs", pairId, "people", personId);
+  }
+
+  let state = {
+    pairId: "trev-erin",
+    meName: "Trevor",
+    themName: "Erin",
+    windowStart: 7*60,
+    windowEnd: 22*60,
+    weekStart: startOfWeek(new Date()),
+    me: { blocks: [] },
+    them: { blocks: [] },
+    unsubMe: null,
+    unsubThem: null,
+  };
+
+  function applyFromQuery(){
+    const qs = new URLSearchParams(location.search);
+    const pair = qs.get("pair");
+    const me = qs.get("me");
+    const them = qs.get("them");
+    const win = qs.get("win");
+    if(pair) state.pairId = pair;
+    if(me) state.meName = me;
+    if(them) state.themName = them;
+    if(win && /^\d+-\d+$/.test(win)){
+      const [a,b] = win.split("-").map(Number);
+      state.windowStart = a*60;
+      state.windowEnd = b*60;
+    }
+  }
+
+  function syncInputs(){
+    $("#pairId").value = state.pairId;
+    $("#meName").value = state.meName;
+    $("#themName").value = state.themName;
+    const winVal = `${Math.floor(state.windowStart/60)}-${Math.floor(state.windowEnd/60)}`;
+    $("#window").value = winVal;
+    $("#mePill").textContent = state.meName || "You";
+    $("#themPill").textContent = state.themName || "Partner";
+    $("#pairPill").textContent = `PAIR: ${state.pairId}`;
+  }
+
+  function fillDayDropdown(){
+    const sel = $("#blockDay");
+    sel.innerHTML = "";
+    for(let i=0;i<7;i++){
+      const d = addDays(state.weekStart, i);
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = fmtDay(d);
+      sel.appendChild(opt);
+    }
+  }
+
+  function updateWeekLabel(){
+    const end = addDays(state.weekStart, 6);
+    $("#weekLabel").textContent = `${fmtDay(state.weekStart)} → ${fmtDay(end)}`;
+  }
+
+  function getWeekBlocks(docData){
+    const wk = weekKey(state.weekStart);
+    const b = (docData?.blocksByWeek && docData.blocksByWeek[wk]) ? docData.blocksByWeek[wk] : [];
+    return Array.isArray(b) ? b : [];
+  }
+
+  async function ensurePersonDoc(pairId, personId, displayName){
+    const ref = personRef(pairId, personId);
+    const snap = await getDoc(ref);
+    if(!snap.exists()){
+      await setDoc(ref, {
+        personId,
+        displayName,
+        blocksByWeek: {},
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+  }
+
+  function subscribe(){
+    // cleanup
+    try{ state.unsubMe && state.unsubMe(); }catch{}
+    try{ state.unsubThem && state.unsubThem(); }catch{}
+    state.unsubMe = null;
+    state.unsubThem = null;
+
+    const pairId = slug(state.pairId) || "pair";
+    const meId = slug(state.meName) || "me";
+    const themId = slug(state.themName) || "them";
+
+    $("#status").textContent = "Connecting…";
+
+    ensurePersonDoc(pairId, meId, state.meName || "Me").then(()=>{
+      state.unsubMe = onSnapshot(personRef(pairId, meId), (snap)=>{
+        state.me.blocks = getWeekBlocks(snap.data());
+        renderWeek();
+        $("#status").textContent = "Live ✅";
+      });
+    }).catch(e=>{
+      $("#status").textContent = "Error (rules?)";
+      console.error(e);
+    });
+
+    ensurePersonDoc(pairId, themId, state.themName || "Partner").then(()=>{
+      state.unsubThem = onSnapshot(personRef(pairId, themId), (snap)=>{
+        state.them.blocks = getWeekBlocks(snap.data());
+        renderWeek();
+      });
+    }).catch(e=>{
+      console.error(e);
+    });
+
+    // update URL
+    const win = `${Math.floor(state.windowStart/60)}-${Math.floor(state.windowEnd/60)}`;
+    const url = new URL(location.href);
+    url.searchParams.set("pair", pairId);
+    url.searchParams.set("me", state.meName || "Me");
+    url.searchParams.set("them", state.themName || "Partner");
+    url.searchParams.set("win", win);
+    history.replaceState({}, "", url.toString());
+  }
+
+  function isBusyAt(minute, blocks){
+    // returns type: "busy" | "soft" | null
+    for(const b of (blocks||[])){
+      if(minute >= b.startMin && minute < b.endMin){
+        return b.type === "soft" ? "soft" : "busy";
+      }
+    }
+    return null;
+  }
+
+  function renderWeek(){
+    const grid = $("#weekGrid");
+    const startMin = state.windowStart;
+    const endMin = state.windowEnd;
+    const step = 30;
+
+    // header row
+    grid.innerHTML = "";
+    grid.style.gridTemplateColumns = "70px repeat(7, 1fr)";
+
+    const headTime = document.createElement("div");
+    headTime.className = "cell head time";
+    headTime.textContent = "";
+    grid.appendChild(headTime);
+
+    for(let d=0; d<7; d++){
+      const cell = document.createElement("div");
+      cell.className = "cell head";
+      cell.textContent = fmtDay(addDays(state.weekStart, d));
+      grid.appendChild(cell);
+    }
+
+    for(let m=startMin; m<endMin; m+=step){
+      const timeCell = document.createElement("div");
+      timeCell.className = "cell time";
+      timeCell.textContent = minutesToTime(m);
+      grid.appendChild(timeCell);
+
+      for(let d=0; d<7; d++){
+        const slot = document.createElement("div");
+        slot.className = "cell slot free";
+        slot.dataset.day = String(d);
+        slot.dataset.min = String(m);
+
+        // busy if either person busy; darker for "busy", lighter for "soft"
+        const meType = isBusyAt(m, state.me.blocks);
+        const themType = isBusyAt(m, state.them.blocks);
+
+        // If both busy, show busy. If either busy, show that type (busy wins over soft).
+        const type = (meType === "busy" || themType === "busy") ? "busy" : (meType || themType);
+        if(type === "busy") slot.classList.add("busy");
+        if(type === "soft") slot.classList.add("soft");
+
+        slot.title = `${fmtDay(addDays(state.weekStart, d))} ${minutesToTime(m)}\n${state.meName}: ${meType||"free"}\n${state.themName}: ${themType||"free"}\nTap to add a block`;
+
+        slot.addEventListener("click", ()=>{
+          $("#blockDay").value = String(d);
+          $("#blockStart").value = minutesToTime(m);
+          $("#blockEnd").value = minutesToTime(Math.min(m+90, 24*60-1));
+          toast("Prefilled block form ↓");
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+
+        grid.appendChild(slot);
+      }
+    }
+  }
+
+  async function saveBlock(){
+    const pairId = slug($("#pairId").value) || "pair";
+    const meName = ($("#meName").value || "").trim() || "Me";
+    const meId = slug(meName) || "me";
+    const dayIndex = Number($("#blockDay").value || 0);
+    const type = $("#blockType").value === "soft" ? "soft" : "busy";
+    const startMin = timeToMinutes($("#blockStart").value);
+    const endMin = timeToMinutes($("#blockEnd").value);
+
+    if(endMin <= startMin){
+      toast("End must be after start");
+      return;
+    }
+
+    const wk = weekKey(state.weekStart);
+    const ref = personRef(pairId, meId);
+    const snap = await getDoc(ref);
+    const data = snap.exists() ? snap.data() : { blocksByWeek: {} };
+    const blocksByWeek = data.blocksByWeek || {};
+    const arr = Array.isArray(blocksByWeek[wk]) ? blocksByWeek[wk] : [];
+
+    // store as day + minutes, then render with day offset
+    // For simplicity, we encode day into minutes range by shifting: day*1440 + minute.
+    const shift = dayIndex * 1440;
+    const block = {
+      startMin: shift + startMin,
+      endMin: shift + endMin,
+      type,
+      createdAt: Date.now()
+    };
+
+    arr.push(block);
+    blocksByWeek[wk] = arr;
+
+    await updateDoc(ref, { displayName: meName, blocksByWeek, updatedAt: serverTimestamp() });
+    toast("Saved");
+  }
+
+  async function clearMyBlocksThisWeek(){
+    const pairId = slug($("#pairId").value) || "pair";
+    const meName = ($("#meName").value || "").trim() || "Me";
+    const meId = slug(meName) || "me";
+    const wk = weekKey(state.weekStart);
+
+    const ref = personRef(pairId, meId);
+    const snap = await getDoc(ref);
+    if(!snap.exists()){
+      toast("Nothing to clear");
+      return;
+    }
+    const data = snap.data() || {};
+    const blocksByWeek = data.blocksByWeek || {};
+    blocksByWeek[wk] = [];
+    await updateDoc(ref, { blocksByWeek, updatedAt: serverTimestamp() });
+    toast("Cleared");
+  }
+
+  // Because we encoded day into minutes, adjust isBusyAt to account for day
+  function isBusyAt(minute, blocks){
+    // minute here is "minute-of-day", but blocks store "minute-of-week" (day*1440 + minute)
+    // We'll handle this by checking within each day column at render time (minute + day shift).
+    return null;
+  }
+
+  // Override renderWeek to use shifted minutes
+  function renderWeek(){
+    const grid = $("#weekGrid");
+    const startMin = state.windowStart;
+    const endMin = state.windowEnd;
+    const step = 30;
+
+    grid.innerHTML = "";
+    grid.style.gridTemplateColumns = "70px repeat(7, 1fr)";
+
+    const headTime = document.createElement("div");
+    headTime.className = "cell head time";
+    headTime.textContent = "";
+    grid.appendChild(headTime);
+
+    for(let d=0; d<7; d++){
+      const cell = document.createElement("div");
+      cell.className = "cell head";
+      cell.textContent = fmtDay(addDays(state.weekStart, d));
+      grid.appendChild(cell);
+    }
+
+    const typeAt = (dayIndex, minuteOfDay, blocks)=>{
+      const target = dayIndex*1440 + minuteOfDay;
+      for(const b of (blocks||[])){
+        if(target >= b.startMin && target < b.endMin){
+          return b.type === "soft" ? "soft" : "busy";
+        }
+      }
+      return null;
+    };
+
+    for(let m=startMin; m<endMin; m+=step){
+      const timeCell = document.createElement("div");
+      timeCell.className = "cell time";
+      timeCell.textContent = minutesToTime(m);
+      grid.appendChild(timeCell);
+
+      for(let d=0; d<7; d++){
+        const slot = document.createElement("div");
+        slot.className = "cell slot free";
+
+        const meType = typeAt(d, m, state.me.blocks);
+        const themType = typeAt(d, m, state.them.blocks);
+        const type = (meType === "busy" || themType === "busy") ? "busy" : (meType || themType);
+
+        if(type === "busy") slot.classList.add("busy");
+        if(type === "soft") slot.classList.add("soft");
+
+        slot.title = `${fmtDay(addDays(state.weekStart, d))} ${minutesToTime(m)}\n${state.meName}: ${meType||"free"}\n${state.themName}: ${themType||"free"}\nTap to add a block`;
+        slot.addEventListener("click", ()=>{
+          $("#blockDay").value = String(d);
+          $("#blockStart").value = minutesToTime(m);
+          $("#blockEnd").value = minutesToTime(Math.min(m+90, 24*60-1));
+          toast("Prefilled block form ↓");
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+
+        grid.appendChild(slot);
+      }
+    }
+  }
+
+  // UI events
+  $("#applyBtn").addEventListener("click", ()=>{
+    state.pairId = $("#pairId").value || state.pairId;
+    state.meName = $("#meName").value || state.meName;
+    state.themName = $("#themName").value || state.themName;
+    const win = $("#window").value;
+    const [a,b] = win.split("-").map(Number);
+    state.windowStart = a*60; state.windowEnd = b*60;
+    syncInputs();
+    fillDayDropdown();
+    updateWeekLabel();
+    subscribe();
+    renderWeek();
+    toast("Applied");
+  });
+
+  $("#saveBlockBtn").addEventListener("click", async ()=>{
+    try{
+      await saveBlock();
+    }catch(e){
+      console.error(e);
+      toast("Save failed (rules?)");
+    }
+  });
+
+  $("#clearMineBtn").addEventListener("click", async ()=>{
+    try{
+      await clearMyBlocksThisWeek();
+    }catch(e){
+      console.error(e);
+      toast("Clear failed (rules?)");
+    }
+  });
+
+  $("#prevWeekBtn").addEventListener("click", ()=>{
+    state.weekStart = addDays(state.weekStart, -7);
+    fillDayDropdown();
+    updateWeekLabel();
+    subscribe();
+    renderWeek();
+  });
+
+  $("#nextWeekBtn").addEventListener("click", ()=>{
+    state.weekStart = addDays(state.weekStart, 7);
+    fillDayDropdown();
+    updateWeekLabel();
+    subscribe();
+    renderWeek();
+  });
+
+  $("#jumpToday").addEventListener("click", (e)=>{
+    e.preventDefault();
+    state.weekStart = startOfWeek(new Date());
+    fillDayDropdown();
+    updateWeekLabel();
+    subscribe();
+    renderWeek();
+    toast("This week");
+  });
+
+  // Init
+  applyFromQuery();
+  syncInputs();
+  fillDayDropdown();
+  updateWeekLabel();
+  subscribe();
+  renderWeek();
+</script>
+</body>
+</html>
